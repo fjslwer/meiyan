@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VietGlow AI - Chỉnh Ảnh đẹp</title>
+    <title>VietGlow AI - Chỉnh Ảnh Đẹp</title>
     <!-- Google MediaPipe SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
@@ -24,7 +24,7 @@
         .app-title { color: #EE7879; font-weight: 700; font-size: 19px; letter-spacing: -0.5px; }
         .pro-badge { background: #EE7879; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 10px; }
 
-        /* Photo Display Frame (Fix Stretch/Deform Issue) */
+        /* Photo Display Frame */
         .preview-area {
             flex: 1; margin: 0 16px 12px; border-radius: 24px; overflow: hidden;
             position: relative; background: #EAEAEA; display: flex; justify-content: center; align-items: center;
@@ -96,7 +96,7 @@
     <div class="controls-panel">
         <div id="panel-beauty">
             <div class="slider-group">
-                <div class="slider-label"><span>Làm trắng da (Lạnh)</span><span id="v-whiten">50%</span></div>
+                <div class="slider-label"><span>Làm trắng da</span><span id="v-whiten">50%</span></div>
                 <input type="range" class="slider-input" id="whiten" min="0" max="100" value="50" oninput="draw()">
             </div>
             <div class="slider-group">
@@ -138,7 +138,7 @@
     let faceLandmarksData = null;
     let currentImage = null;
 
-    // Default Load Sample Image
+    // Load Default Portrait Image
     window.onload = () => {
         const defaultImg = new Image();
         defaultImg.crossOrigin = "anonymous";
@@ -149,7 +149,7 @@
         defaultImg.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80";
     };
 
-    // Correct Ratio Draw (Prevents Stretching/Deformation)
+    // Calculate Aspect Ratio to Avoid Photo Stretching
     function draw() {
         if (!currentImage) return;
 
@@ -159,7 +159,6 @@
 
         canvasCtx.clearRect(0, 0, cWidth, cHeight);
 
-        // Aspect Fill Logic (Object-fit Cover)
         const imgRatio = currentImage.width / currentImage.height;
         const canvasRatio = cWidth / cHeight;
         let renderW, renderH, offsetX, offsetY;
@@ -180,12 +179,10 @@
         const lipstick = document.getElementById('lipstick').value / 100;
         const blush = document.getElementById('blush').value / 100;
 
-        // Apply Color Filters
         canvasCtx.filter = `brightness(${100 + whiten * 20}%) contrast(${100 + whiten * 8}%) saturate(${100 + lipstick * 15}%)`;
         canvasCtx.drawImage(currentImage, offsetX, offsetY, renderW, renderH);
         canvasCtx.filter = 'none';
 
-        // Update Slider UI Labels
         document.getElementById('v-whiten').innerText = document.getElementById('whiten').value + '%';
         document.getElementById('v-smooth').innerText = document.getElementById('smooth').value + '%';
         document.getElementById('v-lipstick').innerText = document.getElementById('lipstick').value + '%';
