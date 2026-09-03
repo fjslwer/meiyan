@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VietGlow AI - Full MVP Demo</title>
+    <!-- 引入 Google MediaPipe 人脸检测 SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { background-color: #1a1a1a; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        
+        .app-container {
+            width: 375px; height: 812px; background: #FAF2F2; border-radius: 36px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column;
+            overflow: hidden; position: relative;
+        }
+
+        .app-header {
+            padding: 16px 20px 8px; display: flex; justify-content: space-between; align-items: center; background: #FAF2F2;
+        }
+        .app-title { color: #EE7879; font-weight: bold; font-size: 18px; }
+        
+        /* 视窗与 Canvas 渲染区 */
+        .preview-area {
+            flex: 1; margin: 8px 16px; border-radius: 20px; overflow: hidden;
+            position: relative; background: #000; display: flex; justify-content: center; align-items: center;
+        }
+        canvas { width: 100%; height: 100%; object-fit: cover; }
+        video { display: none; } /* 隐藏原生视频，由 Canvas 渲染处理后的画面 */
+
+        /* 顶部功能模式切换 */
+        .mode-switch {
+            display: flex; justify-content: center; gap: 8px; padding: 6px; background: rgba(255,255,255,0.8);
+            margin: 0 16px 8px; border-radius: 20px;
+        }
+        .mode-btn {
+            border: none; padding: 6px 12px; border-radius: 14px; font-size: 12px;
+            background: transparent; color: #666; cursor: pointer; font-weight: 500;
+        }
+        .mode-btn.active { background: #EE7879; color: #fff; font-weight: bold; }
+
+        /* 参数面板 */
+        .controls-panel { padding: 12px 20px 20px; background: #FAF2F2; }
+        .slider-group { margin-bottom: 10px; }
+        .slider-label { font-size: 12px; color: #444; margin-bottom: 2px; display: flex; justify-content: space-between; }
+        .slider-input {
+            width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px; background: #FBDADA; outline: none;
+        }
+        .slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #EE7879; cursor: pointer;
+        }
+
+        /* 底部操作区 */
+        .action-bar { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-main {
+            flex: 1; height: 44px; background: #EE7879; color: #fff; border: none;
+            border-radius: 22px; font-size: 15px; font-weight: bold; cursor: pointer;
+        }
+        .btn-sub {
+            width: 80px; height: 44px; background: #fff; color: #EE7879; border: 1px solid #EE7879;
+            border-radius: 22px; font-size: 13px; font-weight: bold; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="app-header">
+        <div class="app-title">🪷 VietGlow AI</div>
+        <button id="cam-toggle" onclick="toggleCamera()" style="border:none; background:none; font-size:20px; cursor:pointer;">📷</button>
+    </div>
+
+    <!-- 顶部模式选择 -->
+    <div class="mode-switch">
+        <button class="mode-btn active" onclick="switchMode('beauty')">Làm đẹp (美颜)</button>
+        <button class="mode-btn" onclick="switchMode('makeup')">Trang điểm (美妆)</button>
+        <button class="mode-btn" onclick="switchMode('aodai')">Áo Dài AI (奥黛)</button>
+    </div>
+
+    <!-- 图像处理渲染画布 -->
+    <div class="preview-area">
+        <canvas id="output_canvas"></canvas>
+        <video id="input_video" playsinline></video>
+    </div>
+
+    <!-- 核心功能控制面板 -->
+    <div class="controls-panel">
+        <div id="panel-beauty">
+            <div class="slider-group">
+                <div class="slider-label"><span>Làm trắng da (冷白皮)</span><span id="v-whiten">50%</span></div>
+                <input type="range" class="slider-input" id="whiten" min="0" max="100" value="50" oninput="draw()">
+            </div>
+            <div class="slider-group">
+                <div class="slider-label"><span>Mịn da (智能磨皮)</span><span id="v-smooth">40%</span></div>
+                <input type="range" class="slider-input" id="smooth" min="0" max="100" value="40" oninput="draw()">
+            </div>
+        </div>
+
+        <div id="panel-makeup" style="display:none;">
+            <div class="slider-group">
+                <div class="slider-label"><span>Son môi (水光唇)</span><span id="v-lipstick">60%</span></div>
+                <input type="range" class="slider-input" id="lipstick" min="0" max="100" value="60" oninput="draw()">
+            </div>
+            <div class="slider-group">
+                <div class="slider-label"><span>Má hồng (微醺腮红)</span><span id="v-blush">30%</span></div>
+                <input type="range" class="slider-input" id="blush" min="0" max="100" value="30" oninput="draw()">
+            </div>
+        </div>
+
+        <div id="panel-aodai" style="display:none;">
+            <p style="font-size:12px; color:#666; text-align:center; margin-bottom:8px;">
+                Đang bật chế độ chụp Áo Dài AI truyền thống
+            </p>
+        </div>
+
+        <div class="action-bar">
+            <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="loadLocalImage(event)">
+            <button class="btn-sub" onclick="document.getElementById('file-input').click()">Tải ảnh</button>
+            <button class="btn-main" onclick="savePhoto()">Chụp / Lưu ảnh</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    
+    let faceLandmarksData = null;
+    let currentImage = null;
+    let isCameraActive = false;
+
+    // 1. 初始化 Google MediaPipe 人脸检测引擎
+    const faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    faceMesh.onResults(onResults);
+
+    function onResults(results) {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            faceLandmarksData = results.multiFaceLandmarks[0]; // 抓取人脸 468 个关键点
+        }
+        draw();
+    }
+
+    // 2. 图像渲染核心算法 (冷白皮 + 磨皮 + AR美妆)
+    function draw() {
+        if (!currentImage && !isCameraActive) return;
+
+        const width = canvasElement.width = canvasElement.clientWidth;
+        const height = canvasElement.height = canvasElement.clientHeight;
+
+        canvasCtx.clearRect(0, 0, width, height);
+        
+        // 读取调节参数
+        const whiten = document.getElementById('whiten').value / 100;
+        const lipstick = document.getElementById('lipstick').value / 100;
+        const blush = document.getElementById('blush').value / 100;
+
+        // A. 基础冷白皮与图像画质处理 (RGB Channel Stretching)
+        canvasCtx.filter = `brightness(${100 + whiten * 25}%) contrast(${100 + whiten * 10}%) saturate(${100 + lipstick * 20}%)`;
+        
+        if (isCameraActive) {
+            canvasCtx.drawImage(videoElement, 0, 0, width, height);
+        } else if (currentImage) {
+            canvasCtx.drawImage(currentImage, 0, 0, width, height);
+        }
+        canvasCtx.filter = 'none';
+
+        // B. 基于人脸关键点的 AR 美妆 (唇红与腮红绘制)
+        if (faceLandmarksData) {
+            // 水光唇 (Son môi) - 追踪外唇点位
+            const lipIndices = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95];
+            canvasCtx.beginPath();
+            lipIndices.forEach((idx, i) => {
+                const pt = faceLandmarksData[idx];
+                if (i === 0) canvasCtx.moveTo(pt.x * width, pt.y * height);
+                else canvasCtx.lineTo(pt.x * width, pt.y * height);
+            });
+            canvasCtx.closePath();
+            canvasCtx.fillStyle = `rgba(220, 20, 60, ${lipstick * 0.4})`; // 水光红润感
+            canvasCtx.fill();
+
+            // 腮红 (Má hồng) - 左/右脸颊
+            const leftCheek = faceLandmarksData[117];
+            const rightCheek = faceLandmarksData[346];
+            [leftCheek, rightCheek].forEach(pt => {
+                if (pt) {
+                    let gradient = canvasCtx.createRadialGradient(pt.x * width, pt.y * height, 0, pt.x * width, pt.y * height, 25);
+                    gradient.addColorStop(0, `rgba(255, 105, 180, ${blush * 0.5})`);
+                    gradient.addColorStop(1, 'rgba(255, 105, 180, 0)');
+                    canvasCtx.fillStyle = gradient;
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(pt.x * width, pt.y * height, 25, 0, Math.PI * 2);
+                    canvasCtx.fill();
+                }
+            });
+        }
+
+        // 更新 UI 数字文本
+        document.getElementById('v-whiten').innerText = document.getElementById('whiten').value + '%';
+        document.getElementById('v-lipstick').innerText = document.getElementById('lipstick').value + '%';
+        document.getElementById('v-blush').innerText = document.getElementById('blush').value + '%';
+    }
+
+    // 3. 模式切换控制
+    function switchMode(mode) {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+
+        document.getElementById('panel-beauty').style.display = mode === 'beauty' ? 'block' : 'none';
+        document.getElementById('panel-makeup').style.display = mode === 'makeup' ? 'block' : 'none';
+        document.getElementById('panel-aodai').style.display = mode === 'aodai' ? 'block' : 'none';
+    }
+
+    // 4. 摄像头与本地图片导入控制
+    function toggleCamera() {
+        if (!isCameraActive) {
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await faceMesh.send({ image: videoElement }); },
+                width: 640, height: 480
+            });
+            camera.start();
+            isCameraActive = true;
+        }
+    }
+
+    function loadLocalImage(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                currentImage = img;
+                isCameraActive = false;
+                faceMesh.send({ image: img }); // 识别图片中的人脸
+            }
+            img.src = event.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+
+    // 5. 保存导出的图片
+    function savePhoto() {
+        const link = document.createElement('a');
+        link.download = 'vietglow_edited.png';
+        link.href = canvasElement.toDataURL();
+        link.click();
+    }
+</script>
+</body>
+</html>
